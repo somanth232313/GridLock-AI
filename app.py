@@ -691,7 +691,7 @@ with tab_offenders:
                 <div class="offender-card">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <div>
-                            <span class="offender-name">:material/directions_car: {offender['Plate']}</span>
+                            <span class="offender-name">Vehicle Plate: {offender['Plate']}</span>
                             <span class="badge badge-high" style="margin-left: 10px;">{offender['Violations']} violations</span>
                         </div>
                         <div>
