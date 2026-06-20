@@ -828,40 +828,7 @@ with tab_arch:
         The system processes input through a multi-stage pipeline optimized for accuracy and speed.
         """)
         
-        st.markdown("""
-        ```mermaid
-        graph TD
-        A[Camera / Video / Batch Input] --> B(Layer 1: ROI Masking)
-        B --> C{Layer 2: Lightness Check}
-        C -->|High Luma| D[Sharpening Filter]
-        C -->|Low Luma| E[CLAHE Gamma Correction]
-        D --> F((YOLOv8 Dual-Model Ensemble))
-        E --> F
-        
-        F -->|Base COCO + Custom Kaggle| G[Custom IoU NMS Merge]
-        G --> H{5-Feature Violation Engine}
-        
-        H -->|HOG + Hough + HSV| K[No Helmet]
-        H -->|Hough + HSV Strap| J[No Seatbelt]
-        H -->|Lane Polygons| I[Wrong-Side Driving]
-        H -->|Spatial Containment| L[Triple Riding]
-        H -->|Zone Polygons| M[Red Light, Stop Line, Parking]
-        
-        K --> N((Contour ANPR))
-        J --> N
-        I --> N
-        L --> N
-        M --> N
-        
-        N --> O[Bilateral Filter + Adaptive Thresh]
-        O --> P[Contour + Perspective Correction]
-        P --> Q[CLAHE + EasyOCR]
-        Q --> R[(SQLite + Evidence Images)]
-        R --> S[Premium Dashboard]
-        S --> T[Repeat Offender Tracking]
-        S --> U[PDF Report Generation]
-        ```
-        """)
+        st.image("architecture.png", use_container_width=True, caption="GridLock AI System Architecture")
         
     with col_details:
         st.markdown("""
