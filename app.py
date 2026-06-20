@@ -34,7 +34,7 @@ from evidence_logger import EvidenceLogger, VIOLATION_SEVERITY
 from dataset_evaluator import DatasetEvaluator
 
 # Must be the first Streamlit command
-st.set_page_config(page_title="GridLock AI", layout="wide", page_icon="🛡️", initial_sidebar_state="expanded")
+st.set_page_config(page_title="GridLock AI", layout="wide", page_icon="🚨", initial_sidebar_state="expanded")
 
 # --- Custom CSS for Premium UI ---
 st.markdown("""
@@ -277,29 +277,29 @@ def generate_pdf_report(df: pd.DataFrame, fines_config: dict) -> bytes:
 # --- SIDEBAR CONTROLS ---
 with st.sidebar:
     st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Flipkart_logo.svg/1200px-Flipkart_logo.svg.png", width=150)
-    st.markdown("### SYSTEM CONTROLS")
+    st.markdown("### ⚙️ Engine Controls")
     
     st.markdown("---")
-    input_mode = st.radio("DATA SOURCE", ["Single Image", "Batch Processing", "Video File", "Webcam Live"])
+    input_mode = st.radio("📡 Input Source", ["Single Image", "Batch Processing", "Video File", "Webcam Live"])
     st.markdown("---")
-    conf_threshold = st.slider("AI CONFIDENCE THRESHOLD", 0.1, 0.9, 0.4, 0.05)
+    conf_threshold = st.slider("🎯 AI Confidence Threshold", 0.1, 0.9, 0.4, 0.05)
     
     st.markdown("---")
-    st.markdown("### ACTIVE SUBSYSTEMS")
-    st.success("System Online: Multi-Model Ensemble")
-    st.success("System Online: Contour ANPR Engine")
+    st.markdown("### 🧠 AI Subsystems")
+    st.success("🟢 Multi-Model Ensemble")
+    st.success("🟢 Contour ANPR Engine")
     if os.path.exists("helmet_model.pt"):
-        st.success("System Online: Custom Helmet ML")
+        st.success("🟢 Custom Helmet ML")
     else:
-        st.warning("System Standby: 5-Feature Helmet Heuristic")
+        st.warning("🟠 5-Feature Helmet Heuristic")
 
-st.title("GridLock AI")
+st.title("🚨 GridLock AI")
 st.markdown("**Enterprise Traffic Violation Detection** | Multi-Model Ensemble | Contour ANPR | Live Intelligence")
 st.markdown("---")
 
 # Create Tabs
 tab_pipeline, tab_dash, tab_offenders, tab_eval, tab_arch = st.tabs([
-    "Live Pipeline", "Intelligence Dashboard", "Repeat Offenders", "Evaluation Matrix", "Architecture"
+    "🚦 Live Pipeline", "📊 Intelligence Dashboard", "🔍 Repeat Offenders", "🔬 Evaluation Matrix", "⚙️ Architecture"
 ])
 
 # ==============================================================================================
@@ -325,17 +325,17 @@ with tab_pipeline:
                                  use_container_width=True)
                         
                         if violations:
-                            st.markdown("### DETECTED VIOLATIONS")
+                            st.markdown("### 🚔 Violations Detected")
                             for v in violations:
                                 sev = VIOLATION_SEVERITY.get(v['type'], {}).get('level', 'MEDIUM')
                                 if sev == "CRITICAL":
-                                    st.error(f"[CRITICAL] **{v['type']}** — Confidence: {v['confidence']:.0%}")
+                                    st.error(f"🚨 **{v['type']}** — Severity: CRITICAL (Conf: {v['confidence']:.0%})")
                                 elif sev == "HIGH":
-                                    st.warning(f"[HIGH] **{v['type']}** — Confidence: {v['confidence']:.0%}")
+                                    st.warning(f"⚠️ **{v['type']}** — Severity: HIGH (Conf: {v['confidence']:.0%})")
                                 else:
-                                    st.info(f"[INFO] **{v['type']}** — Severity: {sev} (Conf: {v['confidence']:.0%})")
+                                    st.info(f"ℹ️ **{v['type']}** — Severity: {sev} (Conf: {v['confidence']:.0%})")
                         else:
-                            st.success("System Clear: No violations detected in this image.")
+                            st.success("✅ No violations detected in this image.")
                     else:
                         st.error("Invalid image file.")
                 except Exception as e:
@@ -403,7 +403,7 @@ with tab_pipeline:
                     st.success(f"Video complete! Processed {frame_count} frames, logged {total_v} violations.")
                     
         elif input_mode == "Webcam Live":
-            st.info("System Ready: Click 'Start Webcam' to begin real-time analysis. Press 'Stop' to end.")
+            st.info("📷 Click 'Start Webcam' to begin real-time analysis. Press 'Stop' to end.")
             
             if st.button("Start Webcam", type="primary"):
                 cap = cv2.VideoCapture(0)
@@ -545,7 +545,7 @@ with tab_dash:
         
         search_col, export_col, pdf_col = st.columns([3, 1, 1])
         with search_col:
-            search_term = st.text_input("Search Registry Database:")
+            search_term = st.text_input("🔍 Search by Plate, Violation, or Severity:")
         
         display_df = df.copy()
         if search_term:
@@ -559,7 +559,7 @@ with tab_dash:
             st.write("")
             csv = display_df.to_csv(index=False).encode('utf-8')
             st.download_button(
-                label="Export to CSV",
+                label="📥 CSV Export",
                 data=csv,
                 file_name='traffic_violations_report.csv',
                 mime='text/csv',
@@ -570,7 +570,7 @@ with tab_dash:
             st.write("")
             pdf_data = generate_pdf_report(df, fines_config)
             st.download_button(
-                label="Download PDF Report",
+                label="📄 Full Report",
                 data=pdf_data,
                 file_name=f'GridLock_Report_{datetime.now().strftime("%Y%m%d")}.txt',
                 mime='text/plain',
@@ -591,7 +591,7 @@ with tab_dash:
         st.dataframe(styled_df, use_container_width=True, height=300)
 
         st.markdown("---")
-        st.subheader("LATEST EVIDENCE LOG")
+        st.subheader("📸 Latest Evidence")
         
         recent_records = df.sort_values(by="id", ascending=False).head(4)
         cols = st.columns(4)
@@ -622,7 +622,7 @@ with tab_dash:
 # TAB 3: REPEAT OFFENDER TRACKING
 # ==============================================================================================
 with tab_offenders:
-    st.header("Repeat Offender Intelligence")
+    st.header("🔍 Repeat Offender Intelligence")
     st.markdown("Identifies vehicles with **2 or more violations** and calculates a risk score.")
     
     df_off = fetch_data()
@@ -691,7 +691,7 @@ with tab_offenders:
                 <div class="offender-card">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <div>
-                            <span class="offender-name">Vehicle Plate: {offender['Plate']}</span>
+                            <span class="offender-name">🚗 {offender['Plate']}</span>
                             <span class="badge badge-high" style="margin-left: 10px;">{offender['Violations']} violations</span>
                         </div>
                         <div>
