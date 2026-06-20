@@ -293,6 +293,10 @@ class ViolationDetector:
         motorcycles = [d for d in detections if d['label'] == 'motorcycle']
         cars_and_trucks = [d for d in detections if d['label'] in ['car', 'bus', 'truck']]
         
+        # New classes from the dedicated Kaggle model (if active)
+        ml_no_helmets = [d for d in detections if d['label'] == 'without helmet']
+        ml_riders = [d for d in detections if d['label'] == 'rider']
+        
         # --- Motorcycle Violations ---
         for bike in motorcycles:
             riders_on_bike = []
@@ -317,14 +321,31 @@ class ViolationDetector:
                 })
             
             # Helmet check for each rider
-            for rider in riders_on_bike:
-                no_helmet, conf = self.check_helmet(image, rider['bbox'])
-                if no_helmet:
-                    violations.append({
-                        "type": "No Helmet",
-                        "bbox": rider['bbox'],
-                        "confidence": conf
-                    })
+            # ML MODEL PATH (Fast & Accurate)
+            if ml_no_helmets:
+                # If we have dedicated ML detections, map them directly to violations
+                for no_helmet in ml_no_helmets:
+                    # Check if this 'without helmet' box overlaps with the bike or rider
+                    iou = calculate_iou(bike['bbox'], no_helmet['bbox'])
+                    if iou > 0.0 or any(calculate_iou(r['bbox'], no_helmet['bbox']) > 0 for r in riders_on_bike):
+                        # Avoid duplicates
+                        if not any(v['type'] == 'No Helmet' and v['bbox'] == no_helmet['bbox'] for v in violations):
+                            violations.append({
+                                "type": "No Helmet",
+                                "bbox": no_helmet['bbox'],
+                                "confidence": no_helmet['confidence']
+                            })
+            
+            # HEURISTIC PATH (Fallback 5-Feature Ensemble)
+            else:
+                for rider in riders_on_bike:
+                    no_helmet, conf = self.check_helmet(image, rider['bbox'])
+                    if no_helmet:
+                        violations.append({
+                            "type": "No Helmet",
+                            "bbox": rider['bbox'],
+                            "confidence": conf
+                        })
         
         # --- Vehicle Violations ---
         for vehicle in cars_and_trucks:

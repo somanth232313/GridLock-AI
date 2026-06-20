@@ -40,74 +40,95 @@ st.set_page_config(page_title="GridLock AI", layout="wide", page_icon="🚨", in
 st.markdown("""
 <style>
     .main {
-        background-color: #0e1117;
+        background-color: #0b0f19;
     }
+    /* Glassmorphism Metric Cards */
     .metric-card {
-        background: linear-gradient(135deg, #1e2127 0%, #252830 100%);
+        background: rgba(30, 33, 43, 0.6);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
         padding: 20px;
-        border-radius: 12px;
-        border: 1px solid #2d3139;
+        border-radius: 16px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
         text-align: center;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-        transition: transform 0.2s;
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
     }
     .metric-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(0,210,255,0.15);
+        transform: translateY(-5px);
+        box-shadow: 0 12px 40px rgba(0, 210, 255, 0.2);
+        border: 1px solid rgba(0, 210, 255, 0.3);
     }
     .metric-value {
-        font-size: 2.2rem;
-        font-weight: 700;
-        color: #00d2ff;
+        font-size: 2.5rem;
+        font-weight: 800;
+        background: -webkit-linear-gradient(45deg, #00d2ff, #3a7bd5);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
         margin-bottom: 5px;
     }
     .metric-label {
         font-size: 0.85rem;
-        color: #a0aabf;
+        color: #8a9bb8;
         text-transform: uppercase;
-        letter-spacing: 1.2px;
+        letter-spacing: 1.5px;
+        font-weight: 600;
     }
     .badge {
-        padding: 3px 10px;
-        border-radius: 4px;
+        padding: 4px 12px;
+        border-radius: 6px;
         font-size: 0.75rem;
         font-weight: bold;
         color: white;
         display: inline-block;
+        text-transform: uppercase;
+        letter-spacing: 1px;
     }
-    .badge-critical { background-color: #b30000; }
-    .badge-high { background-color: #ff3333; }
-    .badge-medium { background-color: #ff9933; }
-    .badge-low { background-color: #33b5e5; }
+    .badge-critical { background: linear-gradient(90deg, #ff0844 0%, #ffb199 100%); }
+    .badge-high { background: linear-gradient(90deg, #f83600 0%, #f9d423 100%); }
+    .badge-medium { background: linear-gradient(90deg, #f6d365 0%, #fda085 100%); }
+    .badge-low { background: linear-gradient(90deg, #84fab0 0%, #8fd3f4 100%); color: #1a1a1a; }
+    
     .offender-card {
-        background: linear-gradient(135deg, #2a1a1a 0%, #1e2127 100%);
-        border: 1px solid #ff3333;
-        border-radius: 10px;
-        padding: 15px;
-        margin-bottom: 10px;
+        background: rgba(42, 26, 26, 0.6);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 51, 51, 0.3);
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 15px;
+        box-shadow: 0 4px 15px rgba(255, 51, 51, 0.1);
     }
     .offender-name {
         color: #ff6b6b;
-        font-size: 1.3rem;
-        font-weight: 700;
+        font-size: 1.4rem;
+        font-weight: 800;
     }
-    .risk-high { color: #ff3333; }
+    .risk-high { color: #ff3333; text-shadow: 0 0 10px rgba(255,51,51,0.5); }
     .risk-medium { color: #ff9933; }
     .risk-low { color: #33cc33; }
+    
+    /* Sleek Tabs */
     .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
+        gap: 15px;
+        background-color: transparent;
     }
     .stTabs [data-baseweb="tab"] {
-        height: 50px;
+        height: 55px;
         white-space: pre-wrap;
-        background-color: transparent;
-        border-radius: 4px 4px 0px 0px;
-        padding-top: 10px;
-        padding-bottom: 10px;
+        background-color: rgba(30, 33, 43, 0.4);
+        border-radius: 8px 8px 0px 0px;
+        padding: 10px 20px;
+        font-weight: 600;
+        color: #8a9bb8;
+        border: 1px solid transparent;
+        transition: all 0.3s ease;
     }
     .stTabs [aria-selected="true"] {
-        background-color: #1e2127;
-        border-bottom: 2px solid #00d2ff;
+        background-color: rgba(30, 33, 43, 0.8);
+        border-top: 2px solid #00d2ff;
+        border-left: 1px solid rgba(255,255,255,0.05);
+        border-right: 1px solid rgba(255,255,255,0.05);
+        color: #ffffff;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -156,7 +177,7 @@ def process_frame(image: np.ndarray, conf_thresh: float):
     # 1. Preprocessing
     processed_img = modules["preprocessor"].execute_pipeline(image)
     
-    # 2. Object Detection (Dual-Model Ensemble)
+    # 2. Object Detection (Multi-Model Ensemble)
     detections = modules["detector"].process_image(processed_img, conf_threshold=conf_thresh)
     
     # 3. Dynamic Traffic Light State
@@ -168,7 +189,7 @@ def process_frame(image: np.ndarray, conf_thresh: float):
         elif d["label"] == "green light":
             current_light_state = "GREEN"
     
-    # 4. Violation Detection (5-Feature Ensemble)
+    # 4. Violation Detection (ML + 5-Feature Ensemble)
     violations = modules["violation_engine"].detect_violations(
         detections, processed_img, traffic_light_state=current_light_state
     )
@@ -252,56 +273,73 @@ def generate_pdf_report(df: pd.DataFrame, fines_config: dict) -> bytes:
 # ==============================================================================================
 # MAIN UI
 # ==============================================================================================
+
+# --- SIDEBAR CONTROLS ---
+with st.sidebar:
+    st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Flipkart_logo.svg/1200px-Flipkart_logo.svg.png", width=150)
+    st.markdown("### ⚙️ Engine Controls")
+    
+    st.markdown("---")
+    input_mode = st.radio("📡 Input Source", ["Single Image", "Batch Processing", "Video File", "Webcam Live"])
+    st.markdown("---")
+    conf_threshold = st.slider("🎯 AI Confidence Threshold", 0.1, 0.9, 0.4, 0.05)
+    
+    st.markdown("---")
+    st.markdown("### 🧠 AI Subsystems")
+    st.success("🟢 Multi-Model Ensemble")
+    st.success("🟢 Contour ANPR Engine")
+    if os.path.exists("helmet_model.pt"):
+        st.success("🟢 Custom Helmet ML")
+    else:
+        st.warning("🟠 5-Feature Helmet Heuristic")
+
 st.title("🚨 GridLock AI")
-st.markdown("**Enterprise Traffic Violation Detection** | 5-Feature Ensemble AI | Contour ANPR | Live Video")
+st.markdown("**Enterprise Traffic Violation Detection** | Multi-Model Ensemble | Contour ANPR | Live Intelligence")
+st.markdown("---")
 
 # Create Tabs
 tab_pipeline, tab_dash, tab_offenders, tab_eval, tab_arch = st.tabs([
-    "🚦 Live Pipeline", "📊 Analytics", "🔍 Repeat Offenders", "🔬 Evaluation", "⚙️ Architecture"
+    "🚦 Live Pipeline", "📊 Intelligence Dashboard", "🔍 Repeat Offenders", "🔬 Evaluation Matrix", "⚙️ Architecture"
 ])
 
 # ==============================================================================================
 # TAB 1: LIVE PIPELINE
 # ==============================================================================================
 with tab_pipeline:
-    st.header("Live Analysis Pipeline")
+    st.markdown("### Real-Time Detection Feed")
     
-    col_input, col_output = st.columns([1, 2])
+    # Now that inputs are in the sidebar, we use the full width for the output/upload area
     
-    with col_input:
-        input_mode = st.radio("Input Source", ["Single Image", "Batch Processing", "Video File", "Webcam Live"])
-        conf_threshold = st.slider("AI Confidence Threshold", 0.1, 0.9, 0.4, 0.05)
-        
-        if input_mode == "Single Image":
-            uploaded_file = st.file_uploader("Upload Traffic Image", type=["jpg", "png", "jpeg", "webp"])
-            if uploaded_file and st.button("Run Analysis", type="primary"):
-                with st.spinner("Processing through 5-feature ensemble..."):
-                    try:
-                        file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
-                        image = cv2.imdecode(file_bytes, 1)
-                        if image is not None:
-                            ann_img, violations, detections = process_frame(image, conf_threshold)
-                            
-                            with col_output:
-                                st.image(cv2.cvtColor(ann_img, cv2.COLOR_BGR2RGB),
-                                         caption=f"{len(detections)} Objects Detected | {len(violations)} Violations Found",
-                                         use_container_width=True)
-                                
-                                if violations:
-                                    for v in violations:
-                                        sev = VIOLATION_SEVERITY.get(v['type'], {}).get('level', 'MEDIUM')
-                                        if sev == "CRITICAL":
-                                            st.error(f"🚨 **{v['type']}** — Severity: CRITICAL (Conf: {v['confidence']:.0%})")
-                                        elif sev == "HIGH":
-                                            st.warning(f"⚠️ **{v['type']}** — Severity: HIGH (Conf: {v['confidence']:.0%})")
-                                        else:
-                                            st.info(f"ℹ️ **{v['type']}** — Severity: {sev} (Conf: {v['confidence']:.0%})")
+    if input_mode == "Single Image":
+        uploaded_file = st.file_uploader("Upload Traffic Image", type=["jpg", "png", "jpeg", "webp"])
+        if uploaded_file and st.button("Run Analysis", type="primary"):
+            with st.spinner("Processing through Multi-Model Ensemble..."):
+                try:
+                    file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
+                    image = cv2.imdecode(file_bytes, 1)
+                    if image is not None:
+                        ann_img, violations, detections = process_frame(image, conf_threshold)
+                        
+                        st.image(cv2.cvtColor(ann_img, cv2.COLOR_BGR2RGB),
+                                 caption=f"{len(detections)} Objects Detected | {len(violations)} Violations Found",
+                                 use_container_width=True)
+                        
+                        if violations:
+                            st.markdown("### 🚔 Violations Detected")
+                            for v in violations:
+                                sev = VIOLATION_SEVERITY.get(v['type'], {}).get('level', 'MEDIUM')
+                                if sev == "CRITICAL":
+                                    st.error(f"🚨 **{v['type']}** — Severity: CRITICAL (Conf: {v['confidence']:.0%})")
+                                elif sev == "HIGH":
+                                    st.warning(f"⚠️ **{v['type']}** — Severity: HIGH (Conf: {v['confidence']:.0%})")
                                 else:
-                                    st.success("✅ No violations detected in this image.")
+                                    st.info(f"ℹ️ **{v['type']}** — Severity: {sev} (Conf: {v['confidence']:.0%})")
                         else:
-                            st.error("Invalid image file.")
-                    except Exception as e:
-                        st.error(f"Pipeline error: {e}")
+                            st.success("✅ No violations detected in this image.")
+                    else:
+                        st.error("Invalid image file.")
+                except Exception as e:
+                    st.error(f"Pipeline error: {e}")
                         
         elif input_mode == "Batch Processing":
             uploaded_files = st.file_uploader("Upload Multiple Images", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
@@ -324,12 +362,11 @@ with tab_pipeline:
                         pass
                     progress_bar.progress((i + 1) / len(uploaded_files))
                 
-                with col_output:
-                    st.success(f"Batch complete!")
-                    bc1, bc2, bc3 = st.columns(3)
-                    bc1.metric("Images Processed", len(uploaded_files))
-                    bc2.metric("Objects Detected", total_detections)
-                    bc3.metric("Violations Found", total_violations)
+                st.success(f"Batch complete!")
+                bc1, bc2, bc3 = st.columns(3)
+                bc1.metric("Images Processed", len(uploaded_files))
+                bc2.metric("Objects Detected", total_detections)
+                bc3.metric("Violations Found", total_violations)
                         
         elif input_mode == "Video File":
             video_file = st.file_uploader("Upload Video", type=["mp4", "avi", "mov"])
@@ -340,7 +377,7 @@ with tab_pipeline:
                     tfile.flush()
                     vf = cv2.VideoCapture(tfile.name)
                     
-                    stframe = col_output.empty()
+                    stframe = st.empty()
                     status = st.empty()
                     total_v = 0
                     frame_skip = 5
@@ -370,7 +407,7 @@ with tab_pipeline:
             
             if st.button("Start Webcam", type="primary"):
                 cap = cv2.VideoCapture(0)
-                stframe = col_output.empty()
+                stframe = st.empty()
                 stop_btn = st.button("Stop Webcam")
                 
                 if cap.isOpened():
@@ -379,7 +416,7 @@ with tab_pipeline:
                     status = st.empty()
                     
                     while cap.isOpened() and not stop_btn:
-                        ret, frame = cap.read()
+                        ret, cap_frame = cap.read()
                         if not ret:
                             st.warning("Could not read from webcam.")
                             break
@@ -388,14 +425,14 @@ with tab_pipeline:
                         # Process every 10th frame for real-time performance
                         if frame_count % 10 == 0:
                             try:
-                                ann_img, viols, _ = process_frame(frame, conf_threshold)
+                                ann_img, viols, _ = process_frame(cap_frame, conf_threshold)
                                 total_v += len(viols)
                                 stframe.image(cv2.cvtColor(ann_img, cv2.COLOR_BGR2RGB), channels="RGB", use_container_width=True)
                                 status.text(f"Live | Frame {frame_count} | Violations: {total_v}")
                             except Exception:
-                                stframe.image(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), channels="RGB", use_container_width=True)
+                                stframe.image(cv2.cvtColor(cap_frame, cv2.COLOR_BGR2RGB), channels="RGB", use_container_width=True)
                         else:
-                            stframe.image(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), channels="RGB", use_container_width=True)
+                            stframe.image(cv2.cvtColor(cap_frame, cv2.COLOR_BGR2RGB), channels="RGB", use_container_width=True)
                     
                     cap.release()
                 else:
