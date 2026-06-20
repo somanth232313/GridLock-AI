@@ -1,40 +1,63 @@
+"""
+Three-Layer Preprocessing Engine — GridLock AI
+
+Flowchart Architecture:
+  Input Image → [Layer 1: ROI Masking] → [Layer 2: Lightness Classifier] → [Layer 3: Resizer] → Output
+
+Each layer can be enabled/disabled based on the deployment context.
+"""
+
 import cv2
 import numpy as np
 
+
 class FlowchartPreprocessor:
     def __init__(self):
-        pass
+        # Layer configuration — can be adjusted per-deployment
+        self.enable_roi_masking = False  # Enable when ROI polygon is configured
+        self.enable_resizing = False     # Disabled: YOLO handles dynamic resizing internally
+        self.roi_polygon = None          # Set via configure_roi()
+        self.target_size = (640, 640)    # YOLO default input size
 
-    def layer1_static_roi_masking(self, image: np.ndarray, polygon_points: list = None) -> np.ndarray:
+    def configure_roi(self, polygon_points: list):
         """
-        Layer 1: Static ROI Masking (O(1))
+        Configure and enable ROI masking with the given polygon.
+        Call this when you know the camera's region of interest.
+        """
+        if polygon_points and len(polygon_points) >= 3:
+            self.roi_polygon = polygon_points
+            self.enable_roi_masking = True
+
+    def layer1_static_roi_masking(self, image: np.ndarray) -> np.ndarray:
+        """
+        Layer 1: Static ROI Masking — O(1) per-pixel
         Drops ~40% of useless pixels outside the defined region of interest.
+        This reduces noise from sky, buildings, and irrelevant background.
         """
-        if not polygon_points:
+        if self.roi_polygon is None:
             return image
             
         mask = np.zeros(image.shape[:2], dtype=np.uint8)
-        pts = np.array(polygon_points, dtype=np.int32)
+        pts = np.array(self.roi_polygon, dtype=np.int32)
         cv2.fillPoly(mask, [pts], 255)
         masked_image = cv2.bitwise_and(image, image, mask=mask)
         return masked_image
 
     def layer2_lightness_classifiers(self, image: np.ndarray, threshold: int = 100) -> np.ndarray:
         """
-        Layer 2: Lightness Classifiers (O(N))
-        Checks ambient illumination and branches to appropriate correction path.
+        Layer 2: Lightness Classifiers — O(N)
+        Checks ambient illumination via Y-channel (luminance) and branches:
+          - Bright Day Path → Sharpening kernel (mitigates motion blur)
+          - Low-Light Path  → CLAHE on Y-channel (enhances shadows/night)
         """
-        # Convert to YUV to extract Y-Channel (Luminance)
         yuv = cv2.cvtColor(image, cv2.COLOR_BGR2YUV)
         y_channel = yuv[:, :, 0]
         
         avg_luminance = np.mean(y_channel)
         
         if avg_luminance >= threshold:
-            # [Bright Day Path] -> [Pass-Through / Sharpness]
             return self._bright_day_path(image)
         else:
-            # [Low-Light Path] -> [Y-Channel LUT Gamma]
             return self._low_light_path(image, yuv, y_channel)
 
     def _bright_day_path(self, image: np.ndarray) -> np.ndarray:
@@ -45,34 +68,43 @@ class FlowchartPreprocessor:
         return cv2.filter2D(image, -1, kernel)
 
     def _low_light_path(self, image: np.ndarray, yuv: np.ndarray, y_channel: np.ndarray) -> np.ndarray:
-        """Applies Y-Channel LUT Gamma correction to handle shadows and low light."""
-        # Using CLAHE as a sophisticated Gamma LUT equivalent on the Y-channel
+        """Applies CLAHE (Contrast Limited Adaptive Histogram Equalization) on Y-channel."""
         clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
         yuv[:, :, 0] = clahe.apply(y_channel)
         return cv2.cvtColor(yuv, cv2.COLOR_YUV2BGR)
 
-    def layer3_contrast_preserving_resizer(self, image: np.ndarray, target_size=(640, 640)) -> np.ndarray:
+    def layer3_contrast_preserving_resizer(self, image: np.ndarray) -> np.ndarray:
         """
         Layer 3: Contrast-Preserving Resizer
-        Resizes the image to the target dimensions while maintaining contrast.
-        (Note: YOLO handles dynamic resizing internally to preserve bounding box math, 
-        so this layer is strictly for the diagram implementation if needed).
+        Uses INTER_AREA for downscaling (anti-aliased) and INTER_CUBIC for upscaling.
+        
+        Note: Disabled by default because YOLO's internal letterboxing preserves
+        bounding box coordinate mapping better than pre-resizing.
         """
         h, w = image.shape[:2]
-        interpolation = cv2.INTER_AREA if (w > target_size[0] or h > target_size[1]) else cv2.INTER_CUBIC
-        return cv2.resize(image, target_size, interpolation=interpolation)
+        target_w, target_h = self.target_size
+        interpolation = cv2.INTER_AREA if (w > target_w or h > target_h) else cv2.INTER_CUBIC
+        return cv2.resize(image, self.target_size, interpolation=interpolation)
 
     def execute_pipeline(self, image: np.ndarray) -> np.ndarray:
         """
-        Executes the full preprocessing pipeline.
-        Matches the architectural diagram provided.
+        Executes the full preprocessing pipeline based on enabled layers.
+        
+        Layer 1 (ROI Masking):  Runs if roi_polygon is configured via configure_roi()
+        Layer 2 (Lightness):    Always runs — essential for handling varied lighting
+        Layer 3 (Resizer):      Disabled by default — YOLO handles this internally
         """
-        # We skip Layer 1 here because YOLO bounding boxes need the full image context first
-        # But the function is available to show the judges.
+        img = image.copy()
         
-        # Execute Layer 2
-        img = self.layer2_lightness_classifiers(image)
+        # Layer 1: ROI Masking (conditional)
+        if self.enable_roi_masking:
+            img = self.layer1_static_roi_masking(img)
         
-        # We skip Layer 3 here because resizing ruins bounding box coordinate mapping
-        # but the function is available to show the judges.
+        # Layer 2: Lightness Classification (always active)
+        img = self.layer2_lightness_classifiers(img)
+        
+        # Layer 3: Resizing (conditional — disabled because YOLO handles it)
+        if self.enable_resizing:
+            img = self.layer3_contrast_preserving_resizer(img)
+        
         return img
