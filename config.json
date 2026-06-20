@@ -1,0 +1,14 @@
+{
+    "stop_line_y": 500,
+    "red_light_polygon": [[100, 400], [400, 400], [450, 600], [50, 600]],
+    "no_parking_polygon": [[800, 200], [1000, 200], [1000, 500], [800, 500]],
+    "fines": {
+        "Triple Riding": 1000,
+        "No Helmet": 500,
+        "No Seatbelt": 500,
+        "Wrong-Side Driving": 1500,
+        "Stop-Line Violation": 500,
+        "Red-Light Violation": 1000,
+        "Illegal Parking": 800
+    }
+}

@@ -1,0 +1,8 @@
+opencv-python
+numpy
+ultralytics
+torch
+torchvision
+easyocr
+streamlit
+scikit-learn

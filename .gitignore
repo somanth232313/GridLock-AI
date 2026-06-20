@@ -1,0 +1,17 @@
+# Ignore dataset and heavy run logs
+datasetImage/
+runs/
+
+# Ignore database
+violations.db
+
+# Ignore Python cache
+__pycache__/
+*.pyc
+
+# Ignore Streamlit cache/config
+.streamlit/
+
+# Ignore IDE files
+.vscode/
+.gemini/
