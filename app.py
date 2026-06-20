@@ -276,7 +276,7 @@ def generate_pdf_report(df: pd.DataFrame, fines_config: dict) -> bytes:
 
 # --- SIDEBAR CONTROLS ---
 with st.sidebar:
-    st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Flipkart_logo.svg/1200px-Flipkart_logo.svg.png", width=150)
+    st.markdown("<h2 style='text-align: center; color: #00d2ff;'>🛡️ GridLock AI</h2>", unsafe_allow_html=True)
     st.markdown("### :material/settings: Engine Controls")
     
     st.markdown("---")
@@ -341,102 +341,102 @@ with tab_pipeline:
                 except Exception as e:
                     st.error(f"Pipeline error: {e}")
                         
-        elif input_mode == "Batch Processing":
-            uploaded_files = st.file_uploader("Upload Multiple Images", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
-            if uploaded_files and st.button("Run Batch Analysis", type="primary"):
-                total_violations = 0
-                total_detections = 0
-                progress_bar = st.progress(0)
-                status_text = st.empty()
+    elif input_mode == "Batch Processing":
+        uploaded_files = st.file_uploader("Upload Multiple Images", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
+        if uploaded_files and st.button("Run Batch Analysis", type="primary"):
+            total_violations = 0
+            total_detections = 0
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            for i, file in enumerate(uploaded_files):
+                status_text.text(f"Processing image {i+1}/{len(uploaded_files)}...")
+                try:
+                    file_bytes = np.asarray(bytearray(file.read()), dtype=np.uint8)
+                    image = cv2.imdecode(file_bytes, 1)
+                    if image is not None:
+                        _, viols, dets = process_frame(image, conf_threshold)
+                        total_violations += len(viols)
+                        total_detections += len(dets)
+                except Exception:
+                    pass
+                progress_bar.progress((i + 1) / len(uploaded_files))
+            
+            st.success(f"Batch complete!")
+            bc1, bc2, bc3 = st.columns(3)
+            bc1.metric("Images Processed", len(uploaded_files))
+            bc2.metric("Objects Detected", total_detections)
+            bc3.metric("Violations Found", total_violations)
+                    
+    elif input_mode == "Video File":
+        video_file = st.file_uploader("Upload Video", type=["mp4", "avi", "mov"])
+        if video_file and st.button("Process Video", type="primary"):
+            with st.spinner("Processing video frames..."):
+                tfile = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+                tfile.write(video_file.read())
+                tfile.flush()
+                vf = cv2.VideoCapture(tfile.name)
                 
-                for i, file in enumerate(uploaded_files):
-                    status_text.text(f"Processing image {i+1}/{len(uploaded_files)}...")
+                stframe = st.empty()
+                status = st.empty()
+                total_v = 0
+                frame_skip = 5
+                frame_count = 0
+                
+                while vf.isOpened():
+                    ret, frame = vf.read()
+                    if not ret:
+                        break
+                    frame_count += 1
+                    if frame_count % frame_skip != 0:
+                        continue
                     try:
-                        file_bytes = np.asarray(bytearray(file.read()), dtype=np.uint8)
-                        image = cv2.imdecode(file_bytes, 1)
-                        if image is not None:
-                            _, viols, dets = process_frame(image, conf_threshold)
-                            total_violations += len(viols)
-                            total_detections += len(dets)
+                        ann_img, viols, _ = process_frame(frame, conf_threshold)
+                        total_v += len(viols)
+                        stframe.image(cv2.cvtColor(ann_img, cv2.COLOR_BGR2RGB), channels="RGB", use_container_width=True)
+                        status.text(f"Frame {frame_count} | Violations so far: {total_v}")
                     except Exception:
-                        pass
-                    progress_bar.progress((i + 1) / len(uploaded_files))
+                        continue
                 
-                st.success(f"Batch complete!")
-                bc1, bc2, bc3 = st.columns(3)
-                bc1.metric("Images Processed", len(uploaded_files))
-                bc2.metric("Objects Detected", total_detections)
-                bc3.metric("Violations Found", total_violations)
-                        
-        elif input_mode == "Video File":
-            video_file = st.file_uploader("Upload Video", type=["mp4", "avi", "mov"])
-            if video_file and st.button("Process Video", type="primary"):
-                with st.spinner("Processing video frames..."):
-                    tfile = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
-                    tfile.write(video_file.read())
-                    tfile.flush()
-                    vf = cv2.VideoCapture(tfile.name)
+                vf.release()
+                os.unlink(tfile.name)
+                st.success(f"Video complete! Processed {frame_count} frames, logged {total_v} violations.")
+                
+    elif input_mode == "Webcam Live":
+        st.info(":material/videocam: Click 'Start Webcam' to begin real-time analysis. Press 'Stop' to end.")
+        
+        if st.button("Start Webcam", type="primary"):
+            cap = cv2.VideoCapture(0)
+            stframe = st.empty()
+            stop_btn = st.button("Stop Webcam")
+            
+            if cap.isOpened():
+                frame_count = 0
+                total_v = 0
+                status = st.empty()
+                
+                while cap.isOpened() and not stop_btn:
+                    ret, cap_frame = cap.read()
+                    if not ret:
+                        st.warning("Could not read from webcam.")
+                        break
                     
-                    stframe = st.empty()
-                    status = st.empty()
-                    total_v = 0
-                    frame_skip = 5
-                    frame_count = 0
-                    
-                    while vf.isOpened():
-                        ret, frame = vf.read()
-                        if not ret:
-                            break
-                        frame_count += 1
-                        if frame_count % frame_skip != 0:
-                            continue
+                    frame_count += 1
+                    # Process every 10th frame for real-time performance
+                    if frame_count % 10 == 0:
                         try:
-                            ann_img, viols, _ = process_frame(frame, conf_threshold)
+                            ann_img, viols, _ = process_frame(cap_frame, conf_threshold)
                             total_v += len(viols)
                             stframe.image(cv2.cvtColor(ann_img, cv2.COLOR_BGR2RGB), channels="RGB", use_container_width=True)
-                            status.text(f"Frame {frame_count} | Violations so far: {total_v}")
+                            status.text(f"Live | Frame {frame_count} | Violations: {total_v}")
                         except Exception:
-                            continue
-                    
-                    vf.release()
-                    os.unlink(tfile.name)
-                    st.success(f"Video complete! Processed {frame_count} frames, logged {total_v} violations.")
-                    
-        elif input_mode == "Webcam Live":
-            st.info(":material/videocam: Click 'Start Webcam' to begin real-time analysis. Press 'Stop' to end.")
-            
-            if st.button("Start Webcam", type="primary"):
-                cap = cv2.VideoCapture(0)
-                stframe = st.empty()
-                stop_btn = st.button("Stop Webcam")
-                
-                if cap.isOpened():
-                    frame_count = 0
-                    total_v = 0
-                    status = st.empty()
-                    
-                    while cap.isOpened() and not stop_btn:
-                        ret, cap_frame = cap.read()
-                        if not ret:
-                            st.warning("Could not read from webcam.")
-                            break
-                        
-                        frame_count += 1
-                        # Process every 10th frame for real-time performance
-                        if frame_count % 10 == 0:
-                            try:
-                                ann_img, viols, _ = process_frame(cap_frame, conf_threshold)
-                                total_v += len(viols)
-                                stframe.image(cv2.cvtColor(ann_img, cv2.COLOR_BGR2RGB), channels="RGB", use_container_width=True)
-                                status.text(f"Live | Frame {frame_count} | Violations: {total_v}")
-                            except Exception:
-                                stframe.image(cv2.cvtColor(cap_frame, cv2.COLOR_BGR2RGB), channels="RGB", use_container_width=True)
-                        else:
                             stframe.image(cv2.cvtColor(cap_frame, cv2.COLOR_BGR2RGB), channels="RGB", use_container_width=True)
-                    
-                    cap.release()
-                else:
-                    st.error("Could not access webcam. Make sure a camera is connected.")
+                    else:
+                        stframe.image(cv2.cvtColor(cap_frame, cv2.COLOR_BGR2RGB), channels="RGB", use_container_width=True)
+                
+                cap.release()
+            else:
+                st.error("Could not access webcam. Make sure a camera is connected.")
 
 # ==============================================================================================
 # TAB 2: ANALYTICS DASHBOARD
