@@ -14,17 +14,7 @@ Features:
 import streamlit as st
 import sqlite3
 import pandas as pd
-import os
-import subprocess
-
-# --- STREAMLIT CLOUD OPENCV FIX ---
-try:
-    import cv2
-except ImportError:
-    subprocess.run(["pip", "uninstall", "-y", "opencv-python", "opencv-contrib-python"], capture_output=True)
-    subprocess.run(["pip", "install", "opencv-python-headless"], capture_output=True)
-    import cv2
-# ----------------------------------
+import cv2
 import numpy as np
 import os
 import json
