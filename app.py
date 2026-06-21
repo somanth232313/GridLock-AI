@@ -24,6 +24,9 @@ from datetime import datetime
 import tempfile
 import base64
 import io
+import torch
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from streamlit_image_coordinates import streamlit_image_coordinates
 
 # Import custom modules
 from preprocessing import FlowchartPreprocessor
@@ -195,9 +198,24 @@ def process_frame(image: np.ndarray, conf_thresh: float):
     )
     
     # 5. ANPR + Evidence Logging
+    plate_detections = [d for d in detections if d["label"] == "number plate"]
     annotated_img_path = None
+    
     for vol in violations:
-        plate_text = modules["anpr"].extract_plate_text(processed_img, vol["bbox"])
+        # Find the YOLO plate detection that belongs to this vehicle's bounding box
+        vehicle_box = vol["bbox"]
+        matched_plate_box = None
+        for p_det in plate_detections:
+            px1, py1, px2, py2 = p_det["bbox"]
+            # Check if plate center is inside the vehicle's bounding box
+            cx, cy = (px1 + px2) // 2, (py1 + py2) // 2
+            if vehicle_box[0] <= cx <= vehicle_box[2] and vehicle_box[1] <= cy <= vehicle_box[3]:
+                matched_plate_box = p_det["bbox"]
+                break
+                
+        # Pass the matched plate box to the ANPR engine (massive speedup)
+        plate_text = modules["anpr"].extract_plate_text(processed_img, vol["bbox"], matched_plate_box)
+        
         annotated_img_path = modules["logger"].log_violation(
             processed_img, vol["bbox"], vol["type"],
             vol["confidence"], plate_text
@@ -288,6 +306,10 @@ with st.sidebar:
     st.markdown("### :material/memory: AI Subsystems")
     st.success(":material/check_circle: Multi-Model Ensemble")
     st.success(":material/check_circle: Contour ANPR Engine")
+    if torch.cuda.is_available():
+        st.success(":material/check_circle: GPU Accelerated (CUDA)")
+    else:
+        st.info(":material/memory: CPU Mode (GPU not detected)")
     if os.path.exists("helmet_model.pt"):
         st.success(":material/check_circle: Custom Helmet ML")
     else:
@@ -298,8 +320,8 @@ st.markdown("**Enterprise Traffic Violation Detection** | Multi-Model Ensemble |
 st.markdown("---")
 
 # Create Tabs
-tab_pipeline, tab_dash, tab_offenders, tab_eval, tab_arch = st.tabs([
-    ":material/traffic: Live Pipeline", ":material/bar_chart: Intelligence Dashboard", ":material/search: Repeat Offenders", ":material/science: Evaluation Matrix", ":material/settings: Architecture"
+tab_pipeline, tab_dash, tab_offenders, tab_eval, tab_calib, tab_arch = st.tabs([
+    ":material/traffic: Live Pipeline", ":material/bar_chart: Intelligence Dashboard", ":material/search: Repeat Offenders", ":material/science: Evaluation Matrix", ":material/tune: Zone Calibration", ":material/settings: Architecture"
 ])
 
 # ==============================================================================================
@@ -342,31 +364,62 @@ with tab_pipeline:
                     st.error(f"Pipeline error: {e}")
                         
     elif input_mode == "Batch Processing":
-        uploaded_files = st.file_uploader("Upload Multiple Images", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
+        uploaded_files = st.file_uploader("Upload Multiple Images", type=["jpg", "jpeg", "png", "webp", "bmp", "tiff", "tif"], accept_multiple_files=True)
         if uploaded_files and st.button("Run Batch Analysis", type="primary"):
             total_violations = 0
             total_detections = 0
             progress_bar = st.progress(0)
             status_text = st.empty()
             
-            for i, file in enumerate(uploaded_files):
-                status_text.text(f"Processing image {i+1}/{len(uploaded_files)}...")
+            # Parallel I/O: decode all images concurrently using thread pool
+            def decode_image(file):
+                file_bytes = np.asarray(bytearray(file.read()), dtype=np.uint8)
+                return cv2.imdecode(file_bytes, 1)
+            
+            decoded_images = []
+            with ThreadPoolExecutor(max_workers=min(4, len(uploaded_files))) as executor:
+                futures = {executor.submit(decode_image, f): i for i, f in enumerate(uploaded_files)}
+                for future in as_completed(futures):
+                    try:
+                        img = future.result()
+                        if img is not None:
+                            decoded_images.append((futures[future], img))
+                    except Exception:
+                        pass
+            
+            # Sort by original index to maintain order
+            decoded_images.sort(key=lambda x: x[0])
+            
+            # Sequential inference (GPU-bound, cannot be parallelized further)
+            batch_violation_records = []
+            for i, (idx, image) in enumerate(decoded_images):
+                status_text.text(f"Processing image {i+1}/{len(decoded_images)}...")
                 try:
-                    file_bytes = np.asarray(bytearray(file.read()), dtype=np.uint8)
-                    image = cv2.imdecode(file_bytes, 1)
-                    if image is not None:
-                        _, viols, dets = process_frame(image, conf_threshold)
-                        total_violations += len(viols)
-                        total_detections += len(dets)
+                    _, viols, dets = process_frame(image, conf_threshold)
+                    total_violations += len(viols)
+                    total_detections += len(dets)
+                    
+                    for v in viols:
+                        batch_violation_records.append({
+                            "Image": uploaded_files[idx].name,
+                            "Violation": v['type'],
+                            "Confidence": f"{v['confidence']:.1%}"
+                        })
                 except Exception:
                     pass
-                progress_bar.progress((i + 1) / len(uploaded_files))
+                progress_bar.progress((i + 1) / len(decoded_images))
             
             st.success(f"Batch complete!")
             bc1, bc2, bc3 = st.columns(3)
             bc1.metric("Images Processed", len(uploaded_files))
             bc2.metric("Objects Detected", total_detections)
             bc3.metric("Violations Found", total_violations)
+            
+            if batch_violation_records:
+                import pandas as pd
+                st.markdown("### Batch Results Data")
+                st.dataframe(pd.DataFrame(batch_violation_records), use_container_width=True)
+                st.info("💡 Hint: Switch to the **Intelligence Dashboard** tab to see this data added to your analytics charts and search registry!")
                     
     elif input_mode == "Video File":
         video_file = st.file_uploader("Upload Video", type=["mp4", "avi", "mov"])
@@ -815,7 +868,82 @@ with tab_eval:
             st.info("Click 'Run Evaluation' to compute mAP, Confusion Matrix, and PR curves.")
 
 # ==============================================================================================
-# TAB 5: SYSTEM ARCHITECTURE
+# TAB 5: INTERACTIVE ZONE CALIBRATION
+# ==============================================================================================
+with tab_calib:
+    st.header(":material/tune: Interactive Zone Calibration")
+    st.markdown("Upload a reference image of your intersection and click to map the violation zones. Coordinates are saved automatically to `config.json`.")
+    
+    calib_img = st.file_uploader("Upload Intersection Reference Image", type=["jpg", "png", "jpeg"], key="calib_uploader")
+    
+    if calib_img:
+        from PIL import Image
+        img_pil = Image.open(calib_img)
+        
+        st.info("Click exactly **4 points** on the image to define a polygon, or click **1 point** to set the Stop Line Y-coordinate.")
+        
+        col_img, col_controls = st.columns([3, 1])
+        
+        with col_img:
+            value = streamlit_image_coordinates(img_pil, key="calib_canvas")
+            
+        with col_controls:
+            target_zone = st.radio("Select Zone to Calibrate:", ["Red Light Polygon", "No Parking Polygon", "Left Lane", "Right Lane", "Stop Line (Y-axis)"])
+            
+            if "calib_points" not in st.session_state:
+                st.session_state["calib_points"] = []
+                
+            if value is not None:
+                point = [value["x"], value["y"]]
+                # Prevent duplicate clicks
+                if not st.session_state["calib_points"] or st.session_state["calib_points"][-1] != point:
+                    st.session_state["calib_points"].append(point)
+            
+            st.write("Current Points:", st.session_state["calib_points"])
+            
+            if st.button("Clear Points"):
+                st.session_state["calib_points"] = []
+                st.rerun()
+                
+            if st.button("Save to config.json", type="primary"):
+                pts = st.session_state["calib_points"]
+                if target_zone == "Stop Line (Y-axis)" and len(pts) > 0:
+                    y_val = pts[-1][1]
+                    config_data = {}
+                    if os.path.exists("config.json"):
+                        with open("config.json", "r") as f:
+                            config_data = json.load(f)
+                    config_data["stop_line_y"] = y_val
+                    with open("config.json", "w") as f:
+                        json.dump(config_data, f, indent=4)
+                    st.success(f"Stop Line Y saved as {y_val}!")
+                    st.session_state["calib_points"] = []
+                elif target_zone != "Stop Line (Y-axis)" and len(pts) == 4:
+                    config_data = {}
+                    if os.path.exists("config.json"):
+                        with open("config.json", "r") as f:
+                            config_data = json.load(f)
+                            
+                    if target_zone == "Red Light Polygon":
+                        config_data["red_light_polygon"] = pts
+                    elif target_zone == "No Parking Polygon":
+                        config_data["no_parking_polygon"] = pts
+                    elif target_zone == "Left Lane":
+                        if "lanes" not in config_data: config_data["lanes"] = {}
+                        config_data["lanes"]["left_lane"] = pts
+                    elif target_zone == "Right Lane":
+                        if "lanes" not in config_data: config_data["lanes"] = {}
+                        config_data["lanes"]["right_lane"] = pts
+                        
+                    with open("config.json", "w") as f:
+                        json.dump(config_data, f, indent=4)
+                    st.success(f"{target_zone} saved successfully!")
+                    st.session_state["calib_points"] = []
+                else:
+                    st.error("Please select exactly 4 points for polygons, or 1 point for the stop line.")
+
+# ==============================================================================================
+# TAB 6: SYSTEM ARCHITECTURE
 # ==============================================================================================
 with tab_arch:
     st.header("System Architecture")
@@ -834,21 +962,27 @@ with tab_arch:
         st.markdown("""
         ### Key Differentiators
         
-        **1. 5-Feature Helmet Ensemble**
-        HOG descriptor energy + Circular Hough dome detection + HSV color uniformity + Laplacian texture + Canny edges. Weighted vote across all 5 signals.
+        **1. Dual-Model YOLOv8 Ensemble**
+        COCO-pretrained `yolov8n.pt` + Kaggle-trained `best.pt` + custom `helmet_model.pt` merged via custom IoU-NMS.
         
-        **2. Dual-Model Ensemble**
-        COCO-pretrained `yolov8n.pt` + Kaggle-trained `best.pt` merged via custom IoU-NMS.
+        **2. 6-Layer Weather-Aware Preprocessor**
+        ROI Masking → Rain/Fog Removal (Dark Channel Prior) → Shadow Normalization → Motion Deblur → Lightness Classifier → Resizer.
         
-        **3. Contour-Based ANPR**
-        Bilateral filter → adaptive threshold → contour polygon approximation → perspective warp → CLAHE → EasyOCR.
+        **3. ML-Accelerated ANPR**
+        YOLO plate detection → direct crop → CLAHE → EasyOCR (GPU auto-detected). Contour fallback for edge cases.
         
-        **4. Repeat Offender Intelligence**
+        **4. 5-Feature Helmet Fail-safe**
+        HOG + Hough + HSV + Laplacian + Canny weighted ensemble as fallback when ML model is unavailable.
+        
+        **5. Repeat Offender Intelligence**
         Tracks vehicles across sessions. Calculates risk scores based on violation count and severity.
         
-        **5. PASCAL VOC Evaluation**
-        11-point interpolation AP, Confusion Matrix, and interactive P-R curves.
+        **6. Scalable Batch Processing**
+        ThreadPoolExecutor for parallel I/O. GPU auto-detection for CUDA acceleration. Modular microservice-ready architecture.
         
-        **6. Multi-Input Support**
-        Single image, batch, video file, and live webcam processing.
+        **7. Interactive Zone Calibration**
+        Click-to-configure zones via the Calibration tab. Zero-code deployment to any intersection.
+        
+        **8. PASCAL VOC Evaluation**
+        11-point interpolation AP, Confusion Matrix, and interactive P-R curves.
         """)

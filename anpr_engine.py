@@ -11,6 +11,7 @@ import cv2
 import numpy as np
 import easyocr
 import re
+import torch
 
 from utils import safe_crop
 
@@ -19,9 +20,10 @@ class PlateReader:
     def __init__(self):
         """
         Initialize EasyOCR reader.
-        Set gpu=True if CUDA is available for faster processing.
+        Automatically uses GPU if CUDA is available for faster processing.
         """
-        self.reader = easyocr.Reader(['en'], gpu=False)
+        gpu_available = torch.cuda.is_available()
+        self.reader = easyocr.Reader(['en'], gpu=gpu_available)
         
         # Indian license plate regex pattern (e.g., MH12AB1234, KA01HH1234)
         self.plate_pattern = re.compile(r'^[A-Z]{2}\d{1,2}[A-Z]{0,3}\d{1,4}$')
@@ -164,22 +166,35 @@ class PlateReader:
         
         return "", 0.0
 
-    def extract_plate_text(self, image: np.ndarray, bbox: list) -> str:
+    def extract_plate_text(self, image: np.ndarray, bbox: list, plate_bbox: list = None) -> str:
         """
         Full ANPR pipeline:
-          1. Crop vehicle region (focus on plate-likely area)
-          2. Contour-based plate localization
+          1. Use YOLO plate bounding box if available (Fastest & most accurate)
+          2. Fallback: Crop vehicle region & Contour-based localization
           3. Perspective correction on best candidate
           4. OCR with CLAHE enhancement
-          5. Fallback: direct OCR on heuristic crop if contours fail
         
         Args:
             image: Full frame (BGR)
             bbox: Vehicle bounding box [x1, y1, x2, y2]
+            plate_bbox: Optional YOLO number plate bounding box
         
         Returns:
             Extracted plate string or "UNKNOWN"
         """
+        # --- Method 1: YOLO ML Plate Bounding Box (Fast Track) ---
+        if plate_bbox:
+            px1, py1, px2, py2 = plate_bbox
+            plate_crop = safe_crop(image, px1, py1, px2, py2)
+            if plate_crop.size > 0:
+                text, conf = self._ocr_plate(plate_crop)
+                # Give a huge boost if it matches Indian plate regex perfectly
+                if len(text) >= 4 and self.plate_pattern.match(text):
+                    return text
+                elif len(text) >= 4 and conf > 0.4:
+                    return text
+                    
+        # --- Method 2: Fallback Contour Localization (Slow Path) ---
         x1, y1, x2, y2 = bbox
         box_h = y2 - y1
         

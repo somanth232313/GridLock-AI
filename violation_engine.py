@@ -163,17 +163,17 @@ class ViolationDetector:
         return False, 0.0
 
     # ==================================================================================
-    #  SEATBELT DETECTION — Diagonal Line Analysis + Color Segmentation
+    #  SEATBELT DETECTION — Multi-Signal Analysis (HSV + Hough + Gradient Orientation)
     # ==================================================================================
     def check_seatbelt(self, image: np.ndarray, vehicle_box: list) -> tuple:
         """
-        Seatbelt detection using diagonal line analysis + dark strap color segmentation.
+        Seatbelt detection using 3-signal analysis:
         
-        Method:
-          1. Extract windshield/shoulder region of the vehicle
-          2. Look for dark diagonal straps using HSV color filtering
-          3. Apply Hough Transform to find diagonal lines (25-70 degrees)
-          4. Absence of both dark straps AND diagonal lines suggests no seatbelt
+        Signal 1: Dark diagonal strap detection via HSV color segmentation
+        Signal 2: Hough Transform for diagonal lines (25-70 degrees)
+        Signal 3: Gradient orientation analysis (seatbelt straps produce consistent diagonal gradients)
+        
+        Confidence is computed from the strength of combined signals.
         
         Returns:
             (is_violation: bool, confidence: float)
@@ -197,7 +197,6 @@ class ViolationDetector:
         
         # --- Signal 1: Dark strap detection via HSV ---
         hsv_wind = cv2.cvtColor(windshield, cv2.COLOR_BGR2HSV)
-        # Seatbelts are typically dark (black/gray) with low saturation
         dark_mask = cv2.inRange(hsv_wind, (0, 0, 0), (180, 80, 100))
         dark_ratio = np.sum(dark_mask > 0) / (dark_mask.shape[0] * dark_mask.shape[1] + 1e-6)
         
@@ -220,17 +219,33 @@ class ViolationDetector:
                 if 25 <= angle <= 70:
                     diagonal_count += 1
         
-        # --- Combined Decision ---
+        # --- Signal 3: Gradient orientation analysis ---
+        sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
+        sobely = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
+        gradient_angles = np.degrees(np.arctan2(sobely, sobelx + 1e-6))
+        gradient_magnitudes = np.sqrt(sobelx**2 + sobely**2)
+        
+        strong_mask = gradient_magnitudes > np.percentile(gradient_magnitudes, 75)
+        if np.sum(strong_mask) > 0:
+            strong_angles = np.abs(gradient_angles[strong_mask])
+            diagonal_gradient_ratio = np.sum((strong_angles > 25) & (strong_angles < 65)) / (np.sum(strong_mask) + 1e-6)
+        else:
+            diagonal_gradient_ratio = 0.0
+        
+        # --- Combined Decision with Computed Confidence ---
         edge_density = np.sum(edges > 0) / (edges.shape[0] * edges.shape[1] + 1e-6)
         
-        if diagonal_count == 0 and dark_ratio < 0.15:
-            # No diagonal lines AND no dark straps
-            if edge_density > 0.03:  # Windshield has visible content
-                return True, 0.74
-        elif diagonal_count == 0 and dark_ratio >= 0.15:
-            # Dark areas present but no diagonal lines — ambiguous
-            if edge_density > 0.05:
-                return True, 0.62
+        # Score each signal (0 = seatbelt present, 1 = no seatbelt)
+        strap_signal = 1.0 - min(1.0, dark_ratio / 0.20)
+        line_signal = 1.0 - min(1.0, diagonal_count / 3.0)
+        gradient_signal = 1.0 - min(1.0, diagonal_gradient_ratio / 0.25)
+        
+        # Weighted combination
+        no_seatbelt_score = (0.35 * strap_signal + 0.35 * line_signal + 0.30 * gradient_signal)
+        
+        if no_seatbelt_score > 0.60 and edge_density > 0.03:
+            confidence = round(min(0.90, 0.55 + no_seatbelt_score * 0.30), 2)
+            return True, confidence
         
         return False, 0.0
 

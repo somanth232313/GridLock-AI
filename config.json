@@ -1,10 +1,78 @@
 {
-    "stop_line_y": 500,
-    "red_light_polygon": [[100, 400], [400, 400], [450, 600], [50, 600]],
-    "no_parking_polygon": [[800, 200], [1000, 200], [1000, 500], [800, 500]],
+    "stop_line_y": 103,
+    "red_light_polygon": [
+        [
+            100,
+            400
+        ],
+        [
+            400,
+            400
+        ],
+        [
+            450,
+            600
+        ],
+        [
+            50,
+            600
+        ]
+    ],
+    "no_parking_polygon": [
+        [
+            800,
+            200
+        ],
+        [
+            1000,
+            200
+        ],
+        [
+            1000,
+            500
+        ],
+        [
+            800,
+            500
+        ]
+    ],
     "lanes": {
-        "left_lane": [[0, 300], [400, 300], [350, 700], [0, 700]],
-        "right_lane": [[400, 300], [800, 300], [900, 700], [350, 700]],
+        "left_lane": [
+            [
+                643,
+                452
+            ],
+            [
+                216,
+                421
+            ],
+            [
+                622,
+                173
+            ],
+            [
+                11,
+                32
+            ]
+        ],
+        "right_lane": [
+            [
+                680,
+                349
+            ],
+            [
+                328,
+                456
+            ],
+            [
+                637,
+                222
+            ],
+            [
+                643,
+                452
+            ]
+        ],
         "expected_direction": "right",
         "_comment": "Configure these polygons to match your camera's lane layout. Vehicles found in the opposing lane will be flagged as wrong-side driving."
     },

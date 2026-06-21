@@ -2,7 +2,7 @@
 **Flipkart Gridlock Hackathon 2.0 — Championship Edition**
 
 ## 📖 Project Overview
-A production-ready, enterprise-grade AI system that detects **7 distinct traffic violations** from static images, batch uploads, video files, and **live webcam streams**. Built on a **Dual-Model YOLOv8 Ensemble** with a **5-Feature Violation Engine** (HOG + Hough + HSV + Laplacian + Canny), **Contour-Based ANPR** with perspective correction, and a **Premium Plotly Dashboard** with Repeat Offender Intelligence and PDF Report Generation.
+A production-ready, enterprise-grade AI system that detects **7 distinct traffic violations** from static images, batch uploads, video files, and **live webcam streams**. Built on a **Dual-Model YOLOv8 Ensemble** (featuring a custom-trained Kaggle ML model for helmet detection backed by a **5-Feature Heuristic Fail-safe**), **Contour-Based ANPR** with perspective correction, and a **Premium Plotly Dashboard** with Repeat Offender Intelligence and PDF Report Generation.
 
 ---
 
@@ -45,11 +45,11 @@ graph TD
 
 ## 🏆 Championship Features
 
-### 1. 5-Feature Helmet Detection Ensemble
-Instead of a single unreliable signal, we use a **weighted ensemble** of 5 independent computer vision features:
+### 1. Dual-Engine Helmet Detection (Kaggle ML + Heuristic Fail-safe)
+Our primary helmet detection is powered by a **custom YOLOv8 machine learning model** trained specifically on Kaggle (`helmet_model.pt`). To make our system truly enterprise-grade, we engineered a fallback fail-safe: if the ML model drops a detection, the system automatically falls back to a **5-Feature Computer Vision Ensemble** to catch the violation.
 
-| Feature | Weight | Signal |
-|---------|--------|--------|
+| Fallback Feature | Weight | Signal |
+|------------------|--------|--------|
 | HSV Color Uniformity | 20% | Helmets are solid-colored; hair/skin is varied |
 | Laplacian Texture Variance | 25% | Helmets are smooth; hair is textured |
 | Canny Edge Density | 15% | Helmets produce fewer edges |
