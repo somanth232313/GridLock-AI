@@ -1,4 +1,8 @@
-opencv-python-headless
+# ultralytics pulls in opencv-python and easyocr pulls in opencv-python-headless.
+# Both install into the same cv2/ folder, so they must be the exact same version
+# or cv2 ends up half-overwritten (AttributeError: cv2.HOGDescriptor).
+opencv-python==4.10.0.84
+opencv-python-headless==4.10.0.84
 numpy
 ultralytics
 torch
@@ -8,5 +12,4 @@ streamlit
 pandas
 scikit-learn
 plotly
-streamlit-image-coordinates  
- 
+streamlit-image-coordinates
